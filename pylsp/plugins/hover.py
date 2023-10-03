@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 
 @hookimpl
 def pylsp_hover(config, document, position):
+    settings = config.plugin_settings("jedi_definition")
     code_position = _utils.position_to_jedi_linecolumn(document, position)
     definitions = document.jedi_script(use_document_path=True).infer(**code_position)
     word = document.word_at_position(position)
@@ -39,6 +40,24 @@ def pylsp_hover(config, document, position):
         ),
         "",
     )
+    
+    # If the variable type is in builtin module, it will be reasonable
+    # to show its value instead of docstring.
+    if definition.in_builtin_module():
+        names = document.jedi_script(use_document_path=True).goto(
+            follow_imports=settings.get("follow_imports", True),
+            follow_builtin_imports=settings.get("follow_builtin_imports", True),
+            **code_position)
+        
+        if names:
+            name = names[0]
+            return {
+                "contents": _utils.format_docstring(
+                    f"{definition.name} {name.description}",
+                    preferred_markup_kind,
+                    signatures=[signature] if signature else None
+                )
+            }
 
     return {
         "contents": _utils.format_docstring(
